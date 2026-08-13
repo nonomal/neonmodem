@@ -68,5 +68,4 @@ func buildView(mi interface{}, cached bool) string {
 		tmp,
 		true,
 	)
-
 }

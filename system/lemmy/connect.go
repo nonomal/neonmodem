@@ -1,42 +1,20 @@
 package lemmy
 
 import (
-	"bufio"
-	"fmt"
-	"os"
-	"strings"
-	"syscall"
-
-	"golang.org/x/term"
+	"github.com/mrusme/neonmodem/system/prompt"
 )
 
 func (sys *System) Connect(sysURL string) error {
 	// Request input from user
-	scanner := bufio.NewScanner(os.Stdin)
-	var username string = ""
-	for username == "" {
-		fmt.Printf(
-			"Please enter your username or email: ",
-		)
-		scanner.Scan()
-		username = strings.ReplaceAll(scanner.Text(), " ", "")
-		if username == "" {
-			fmt.Println("Invalid input")
-		}
+	username, err := prompt.Line("Please enter your username or email", "username")
+	if err != nil {
+		return err
 	}
 
 	// Request input from user
-	var password string = ""
-	for password == "" {
-		fmt.Printf(
-			"Please enter your password (will not echo): ",
-		)
-		bytepw, err := term.ReadPassword(int(syscall.Stdin))
-		fmt.Println("")
-		if err != nil || len(bytepw) == 0 {
-			fmt.Println("Invalid input")
-		}
-		password = string(bytepw)
+	password, err := prompt.Secret("Please enter your password", "password")
+	if err != nil {
+		return err
 	}
 
 	// Credentials

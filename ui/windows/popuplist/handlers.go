@@ -51,3 +51,31 @@ func handleWinOpenCmd(mi interface{}, c cmd.Command) (bool, []tea.Cmd) {
 
 	return false, cmds
 }
+
+func handleWinFreshDataCmd(mi interface{}, c cmd.Command) (bool, []tea.Cmd) {
+	var m *Model = mi.(*Model)
+	var cmds []tea.Cmd
+
+	if c.Target != WIN_ID {
+		return false, cmds
+	}
+
+	if items, ok := c.GetArg("items").([]list.Item); ok {
+		m.items = items
+		m.list.SetItems(m.items)
+	}
+	m.ctx.Loading = false
+
+	if errs, ok := c.GetArg("errors").([]error); ok && len(errs) > 0 {
+		for _, err := range errs {
+			m.ctx.Logger.Error(err)
+		}
+		cmds = append(cmds, cmd.New(
+			cmd.MsgError,
+			"*",
+			cmd.Arg{Name: "errors", Value: errs},
+		).Tea())
+	}
+
+	return true, cmds
+}

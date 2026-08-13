@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"runtime/debug"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mrusme/neonmodem/config"
@@ -20,8 +21,22 @@ var EMBEDFS *embed.FS
 var LOG *zap.SugaredLogger
 var CFG config.Config
 
+func version() string {
+	if config.VERSION != "" {
+		return config.VERSION
+	}
+
+	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" {
+		return bi.Main.Version
+	}
+
+	return "unknown"
+}
+
 func init() {
 	cobra.OnInitialize(load)
+	rootCmd.Version = version()
+	rootCmd.SetVersionTemplate("neonmodem {{.Version}}\n")
 	rootCmd.
 		PersistentFlags().
 		Bool(
@@ -94,7 +109,8 @@ func loadSystems(c *ctx.Ctx) []error {
 		sysCfg.Config["proxy"] = CFG.Proxy
 		sys, err := system.New(sysCfg.Type, &sysCfg.Config, LOG)
 		if err != nil {
-			c.Logger.Errorf("error loading system: %s", err)
+			c.Logger.Errorf("error loading system %s: %s", sysCfg.Type, err)
+			c.Logger.Infof("system %s won't be available due to errors", sysCfg.Type)
 			errs = append(errs, err)
 		} else {
 			c.Logger.Debugf("loaded %s system", sysCfg.Type)
@@ -117,20 +133,11 @@ var rootCmd = &cobra.Command{
 		"in Go, supporting Discourse and Lemmy.\n" +
 		"More info available on https://xn--gckvb8fzb.com/projects/neonmodem",
 	Run: func(cmd *cobra.Command, args []string) {
-		var err error
-
 		c := ctx.New(EMBEDFS, &CFG, LOG)
-		errs := loadSystems(&c)
-		if len(errs) > 0 {
-			for _, err = range errs {
-				c.Logger.Error(err)
-			}
-			panic("Error(s) loading system(s)")
-		}
+		_ = loadSystems(&c)
 
 		tui := tea.NewProgram(ui.NewModel(&c), tea.WithAltScreen())
-		err = tui.Start()
-		if err != nil {
+		if _, err := tui.Run(); err != nil {
 			panic(err)
 		}
 	},

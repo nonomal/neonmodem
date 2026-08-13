@@ -5,7 +5,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mrusme/neonmodem/aggregator"
 	"github.com/mrusme/neonmodem/models/post"
@@ -33,8 +32,7 @@ type Model struct {
 
 	viewport viewport.Model
 
-	a    *aggregator.Aggregator
-	glam *glamour.TermRenderer
+	a *aggregator.Aggregator
 
 	buffer   string
 	replyIDs []string
@@ -110,27 +108,49 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *Model) loadPost(p *post.Post, delay ...time.Duration) tea.Cmd {
+func (m *Model) loadPost(
+	p *post.Post,
+	gen int64,
+	delay ...time.Duration,
+) tea.Cmd {
+	c := m.ctx
+	viewportWidth := m.viewport.Width
+	imageWidth := m.tk.ViewWidth() - 8
+
 	return func() tea.Msg {
 		if len(delay) == 1 {
 			time.Sleep(delay[0])
 		}
 
+		isCurrent := func() bool { return c.IsCurrentLoadGen(gen) }
+
+		if !isCurrent() {
+			return nil
+		}
+
 		if err := m.a.LoadPost(p); err != nil {
-			m.ctx.Logger.Error(err)
-			c := cmd.New(
+			c.Logger.Error(err)
+			if !isCurrent() {
+				return nil
+			}
+			return *cmd.New(
 				cmd.MsgError,
 				WIN_ID,
 				cmd.Arg{Name: "error", Value: err},
 			)
-			return *c
 		}
 
-		c := cmd.New(
+		rendered, ok := renderPost(c, p, viewportWidth, imageWidth, isCurrent)
+		if !ok {
+			return nil
+		}
+
+		return *cmd.New(
 			cmd.WinFreshData,
 			WIN_ID,
 			cmd.Arg{Name: "post", Value: p},
+			cmd.Arg{Name: "gen", Value: gen},
+			cmd.Arg{Name: "rendered", Value: rendered},
 		)
-		return *c
 	}
 }

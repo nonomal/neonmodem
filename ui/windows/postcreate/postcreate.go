@@ -5,13 +5,14 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mrusme/neonmodem/aggregator"
+	"github.com/mrusme/neonmodem/models/post"
+	"github.com/mrusme/neonmodem/models/reply"
+	"github.com/mrusme/neonmodem/ui/cmd"
 	"github.com/mrusme/neonmodem/ui/ctx"
 	"github.com/mrusme/neonmodem/ui/toolkit"
 )
 
-var (
-	WIN_ID = "postcreate"
-)
+var WIN_ID = "postcreate"
 
 type Model struct {
 	ctx *ctx.Ctx
@@ -29,6 +30,8 @@ type Model struct {
 	iface      interface{}
 	replyToIdx int
 	replyTo    string
+
+	submitting bool
 
 	viewcache           string
 	viewcacheTextareaXY []int
@@ -54,6 +57,7 @@ func NewModel(c *ctx.Ctx) Model {
 		iface:      nil,
 		replyToIdx: 0,
 		replyTo:    "",
+		submitting: false,
 
 		viewcache:           "",
 		viewcacheTextareaXY: []int{0, 0, 0, 0},
@@ -84,11 +88,36 @@ func NewModel(c *ctx.Ctx) Model {
 				Handler: handleSubmit,
 			},
 		},
-		OnWinOpenCmd:  handleWinOpenCmd,
-		OnWinCloseCmd: handleWinCloseCmd,
+		OnWinOpenCmd:      handleWinOpenCmd,
+		OnWinCloseCmd:     handleWinCloseCmd,
+		OnWinFreshDataCmd: handleWinFreshDataCmd,
 	})
 
 	return m
+}
+
+func (m *Model) createPost(p post.Post) tea.Cmd {
+	a := m.a
+
+	return func() tea.Msg {
+		return *cmd.New(
+			cmd.WinFreshData,
+			WIN_ID,
+			cmd.Arg{Name: "error", Value: a.CreatePost(&p)},
+		)
+	}
+}
+
+func (m *Model) createReply(r reply.Reply) tea.Cmd {
+	a := m.a
+
+	return func() tea.Msg {
+		return *cmd.New(
+			cmd.WinFreshData,
+			WIN_ID,
+			cmd.Arg{Name: "error", Value: a.CreateReply(&r)},
+		)
+	}
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

@@ -61,8 +61,9 @@ func NewModel(c *ctx.Ctx) Model {
 				Handler: handleSelect,
 			},
 		},
-		OnViewResize: handleViewResize,
-		OnWinOpenCmd: handleWinOpenCmd,
+		OnViewResize:      handleViewResize,
+		OnWinOpenCmd:      handleWinOpenCmd,
+		OnWinFreshDataCmd: handleWinFreshDataCmd,
 	})
 
 	return m

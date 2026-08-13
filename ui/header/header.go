@@ -27,6 +27,7 @@ var (
 type Model struct {
 	ctx     *ctx.Ctx
 	spinner spinner.Model
+	loading bool
 }
 
 func NewModel(c *ctx.Ctx) Model {
@@ -49,16 +50,16 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	if m.ctx.Loading == true {
+	if m.ctx.Loading && !m.loading {
+		m.loading = true
 		cmds = append(cmds, m.spinner.Tick)
-	} else {
-		return m, nil
+	} else if !m.ctx.Loading && m.loading {
+		m.loading = false
 	}
 
-	switch msg := msg.(type) {
-	case spinner.TickMsg:
+	if tick, ok := msg.(spinner.TickMsg); ok && m.loading {
 		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
+		m.spinner, cmd = m.spinner.Update(tick)
 		cmds = append(cmds, cmd)
 	}
 

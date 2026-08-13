@@ -35,6 +35,10 @@ func handleSubmit(mi interface{}) (bool, []tea.Cmd) {
 	var m *Model = mi.(*Model)
 	var cmds []tea.Cmd
 
+	if m.submitting {
+		return true, cmds
+	}
+
 	if m.action == "post" {
 		// --- NEW POST ---
 		subject := m.textinput.Value()
@@ -56,16 +60,9 @@ func handleSubmit(mi interface{}) (bool, []tea.Cmd) {
 			SysIDX: x.SysIDX,
 		}
 
-		err := m.a.CreatePost(&p)
-		if err != nil {
-			m.ctx.Logger.Error(err)
-			cmds = append(cmds, cmd.New(
-				cmd.MsgError,
-				WIN_ID,
-				cmd.Arg{Name: "error", Value: err},
-			).Tea())
-			return true, cmds
-		}
+		m.submitting = true
+		m.ctx.Loading = true
+		cmds = append(cmds, m.createPost(p))
 	} else if m.action == "reply" {
 		// --- REPLY TO EXISTING POST ---
 		var r reply.Reply
@@ -87,17 +84,35 @@ func handleSubmit(mi interface{}) (bool, []tea.Cmd) {
 
 		r.Body = m.textarea.Value()
 
-		err := m.a.CreateReply(&r)
-		if err != nil {
-			m.ctx.Logger.Error(err)
-			cmds = append(cmds, cmd.New(
-				cmd.MsgError,
-				WIN_ID,
-				cmd.Arg{Name: "error", Value: err},
-			).Tea())
-			return true, cmds
-		}
+		m.submitting = true
+		m.ctx.Loading = true
+		cmds = append(cmds, m.createReply(r))
 	} // </IF POST || REPLY>
+
+	return true, cmds
+}
+
+func handleWinFreshDataCmd(mi interface{}, c cmd.Command) (bool, []tea.Cmd) {
+	var m *Model = mi.(*Model)
+	var cmds []tea.Cmd
+
+	if c.Target != WIN_ID {
+		return false, cmds
+	}
+
+	m.submitting = false
+	m.ctx.Loading = false
+
+	if errIface := c.GetArg("error"); errIface != nil {
+		err := errIface.(error)
+		m.ctx.Logger.Error(err)
+		cmds = append(cmds, cmd.New(
+			cmd.MsgError,
+			WIN_ID,
+			cmd.Arg{Name: "error", Value: err},
+		).Tea())
+		return true, cmds
+	}
 
 	m.inputFocused = 0
 	m.textinput.Reset()

@@ -1,8 +1,6 @@
 package ui
 
 import (
-	// "fmt"
-
 	"strings"
 
 	"github.com/mrusme/neonmodem/aggregator"
@@ -43,8 +41,8 @@ var DefaultKeyMap = KeyMap{
 		key.WithHelp("C-t", "Forum selector"),
 	),
 	Close: key.NewBinding(
-		key.WithKeys("q", "esc"),
-		key.WithHelp("q/esc", "close"),
+		key.WithKeys("esc"),
+		key.WithHelp("esc", "close"),
 	),
 }
 
@@ -99,9 +97,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keymap.Close):
+			focused := m.wm.Focused()
 			closed, ccmds := m.wm.CloseFocused()
 			if !closed {
-				return m, tea.Quit
+				break
+				// return m, tea.Quit
+			}
+			if focused == postshow.WIN_ID {
+				m.ctx.CancelLoad()
 			}
 			return m, tea.Batch(ccmds...)
 		case key.Matches(msg, m.keymap.SystemSelect):
@@ -141,23 +144,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			all := forum.Forum{ID: "", Name: "All", SysIDX: m.ctx.GetCurrentSystem()}
 			listItems = append(listItems, all)
 
-			forums, errs := m.a.ListForums()
-			for _, err := range errs {
-				if err != nil {
-					m.ctx.Logger.Error(err)
-					ccmds = append(ccmds, cmd.New(
-						cmd.MsgError,
-						"*",
-						cmd.Arg{Name: "errors", Value: errs},
-					).Tea())
-				}
-			}
+			m.ctx.Loading = true
+			ccmds = append(ccmds, m.listForums(all))
 
-			for _, f := range forums {
-				listItems = append(listItems, f)
-			}
-
-			ccmds = m.wm.Open(
+			ccmds = append(ccmds, m.wm.Open(
 				popuplist.WIN_ID,
 				popuplist.NewModel(m.ctx),
 				[4]int{
@@ -172,7 +162,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmd.Arg{Name: "selectionID", Value: "forum"},
 					cmd.Arg{Name: "items", Value: listItems},
 				),
-			)
+			)...)
 
 			return m, tea.Batch(ccmds...)
 
@@ -242,6 +232,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case cmd.WinClose:
+			m.ctx.Logger.Debugf("got cmd.WinClose, target: %s", msg.Target)
+
 			switch msg.Target {
 
 			case postcreate.WIN_ID:
@@ -310,6 +302,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func (m Model) listForums(all forum.Forum) tea.Cmd {
+	a := m.a
+
+	return func() tea.Msg {
+		forums, errs := a.ListForums()
+
+		items := []list.Item{all}
+		for _, f := range forums {
+			items = append(items, f)
+		}
+
+		var failures []error
+		for _, err := range errs {
+			if err != nil {
+				failures = append(failures, err)
+			}
+		}
+
+		return *cmd.New(
+			cmd.WinFreshData,
+			popuplist.WIN_ID,
+			cmd.Arg{Name: "items", Value: items},
+			cmd.Arg{Name: "errors", Value: failures},
+		)
+	}
+}
+
 func (m Model) View() string {
 	return m.buildView(true)
 }
@@ -318,14 +337,14 @@ func (m Model) buildView(cached bool) string {
 	s := strings.Builder{}
 	var tmp string = ""
 
-	m.ctx.Logger.Debugf("viewcacheID: %s\n", m.viewcacheID)
+	// m.ctx.Logger.Debugf("viewcacheID: %s\n", m.viewcacheID)
 	if cached && m.viewcache != "" && m.viewcacheID == m.wm.Focused() &&
 		m.viewcacheID == postcreate.WIN_ID {
 		m.ctx.Logger.Debug("hitting UI viewcache")
 		tmp = m.viewcache
 		m.renderOnlyFocused = true
 	} else {
-		m.ctx.Logger.Debug("generating UI viewcache")
+		// m.ctx.Logger.Debug("generating UI viewcache")
 		m.renderOnlyFocused = false
 		if m.currentView > 0 {
 			s.WriteString(m.header.View() + "\n")

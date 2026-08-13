@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/mrusme/neonmodem/models/author"
@@ -177,11 +178,31 @@ func (sys *System) ListForums() ([]forum.Forum, error) {
 }
 
 func (sys *System) ListPosts(forumID string) ([]post.Post, error) {
-	resp, err := sys.client.Posts(context.Background(), lemmy.GetPosts{
+	var err error
+	var catID int = -1
+
+	if forumID != "" {
+		catID, err = strconv.Atoi(forumID)
+		if err != nil {
+			return []post.Post{}, err
+		}
+	}
+
+	lgp := lemmy.GetPosts{
 		Type:  lemmy.NewOptional(lemmy.ListingTypeSubscribed),
 		Sort:  lemmy.NewOptional(lemmy.SortTypeNew),
 		Limit: lemmy.NewOptional(int64(50)),
-	})
+	}
+	if catID > -1 {
+		lgp = lemmy.GetPosts{
+			CommunityID: lemmy.NewOptional(int64(catID)),
+			Type:        lemmy.NewOptional(lemmy.ListingTypeSubscribed),
+			Sort:        lemmy.NewOptional(lemmy.SortTypeNew),
+			Limit:       lemmy.NewOptional(int64(50)),
+		}
+	}
+
+	resp, err := sys.client.Posts(context.Background(), lgp)
 
 	if err != nil {
 		return []post.Post{}, err
@@ -252,17 +273,20 @@ func (sys *System) LoadPost(p *post.Post) error {
 	// }
 
 	resp, err := sys.client.Comments(context.Background(), lemmy.GetComments{
-		PostID: lemmy.NewOptional[int64](pid),
+		PostID:   lemmy.NewOptional[int64](pid),
+		MaxDepth: lemmy.NewOptional[int64](8),
+		Sort:     lemmy.NewOptional[lemmy.CommentSortType](lemmy.CommentSortTypeHot),
+		Type:     lemmy.NewOptional[lemmy.ListingType](lemmy.ListingTypeAll),
 	})
 	if err != nil {
 		return err
 	}
 
-	p.Replies = []reply.Reply{}
+	replies := []reply.Reply{}
 	for _, i := range resp.Comments {
 		createdAt := i.Comment.Published
 
-		p.Replies = append(p.Replies, reply.Reply{
+		replies = append(replies, reply.Reply{
 			ID: strconv.FormatInt(i.Comment.ID, 10),
 
 			InReplyTo: p.ID,
@@ -276,10 +300,38 @@ func (sys *System) LoadPost(p *post.Post) error {
 				Name: i.Creator.Name,
 			},
 
+			Replies: []reply.Reply{},
+
 			SysIDX: sys.ID,
+
+			MetaPath: strings.Split(i.Comment.Path, "."),
 		})
 	}
+
+	findRepliesFor(&replies, &p.Replies, 0)
+
 	return nil
+}
+
+func findRepliesFor(prv *[]reply.Reply, nxt *[]reply.Reply, lvl int) {
+	if lvl >= 8 {
+		return
+	}
+
+	for i := 0; i < len(*prv); i++ {
+		if len((*prv)[i].MetaPath) == (lvl + 2) {
+			*nxt = append(*nxt, (*prv)[i])
+		}
+	}
+	nextLayer := []reply.Reply{}
+	findRepliesFor(prv, &nextLayer, lvl+1)
+	for j := 0; j < len(nextLayer); j++ {
+		for k := 0; k < len(*nxt); k++ {
+			if (*nxt)[k].ID == nextLayer[j].MetaPath[(lvl+1)] {
+				(*nxt)[k].Replies = append((*nxt)[k].Replies, nextLayer[j])
+			}
+		}
+	}
 }
 
 func (sys *System) CreatePost(p *post.Post) error {

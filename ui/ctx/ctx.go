@@ -2,7 +2,9 @@ package ctx
 
 import (
 	"embed"
+	"sync/atomic"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/mrusme/neonmodem/config"
 	"github.com/mrusme/neonmodem/models/forum"
 	"github.com/mrusme/neonmodem/system"
@@ -20,8 +22,12 @@ type Ctx struct {
 	Logger  *zap.SugaredLogger
 	Theme   *theme.Theme
 
+	DarkBackground bool
+
 	currentSystem int
 	currentForum  forum.Forum
+
+	loadGen *atomic.Int64
 }
 
 func New(
@@ -38,9 +44,25 @@ func New(
 		Logger:  logger,
 		Theme:   theme.New(cfg),
 
+		DarkBackground: lipgloss.HasDarkBackground(),
+
 		currentSystem: -1,
 		currentForum:  forum.Forum{},
+
+		loadGen: new(atomic.Int64),
 	}
+}
+
+func (c *Ctx) NextLoadGen() int64 {
+	return c.loadGen.Add(1)
+}
+
+func (c *Ctx) IsCurrentLoadGen(gen int64) bool {
+	return c.loadGen.Load() == gen
+}
+
+func (c *Ctx) CancelLoad() {
+	c.loadGen.Add(1)
 }
 
 func (c *Ctx) AddSystem(sys *system.System) error {

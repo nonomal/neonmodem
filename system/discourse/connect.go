@@ -1,7 +1,6 @@
 package discourse
 
 import (
-	"bufio"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -10,10 +9,9 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net/url"
-	"os"
-	"strings"
 
 	"github.com/google/uuid"
+	"github.com/mrusme/neonmodem/system/prompt"
 	"github.com/pkg/browser"
 )
 
@@ -25,20 +23,10 @@ type UserAPIKey struct {
 }
 
 func (sys *System) Connect(sysURL string) error {
-	var err error
-
 	// Request input from user
-	scanner := bufio.NewScanner(os.Stdin)
-	var username string = ""
-	for username == "" {
-		fmt.Printf(
-			"Please enter your username: ",
-		)
-		scanner.Scan()
-		username = strings.ReplaceAll(scanner.Text(), " ", "")
-		if username == "" {
-			fmt.Println("Invalid input")
-		}
+	username, err := prompt.Line("Please enter your username", "username")
+	if err != nil {
+		return err
 	}
 
 	// Private key
@@ -93,17 +81,12 @@ func (sys *System) Connect(sysURL string) error {
 	}
 
 	// Request input from user
-	scanner = bufio.NewScanner(os.Stdin)
-	var encodedUserAPIKey string = ""
-	for encodedUserAPIKey == "" {
-		fmt.Printf(
-			"\nPlease copy the user API key after authorizing and paste it here: ",
-		)
-		scanner.Scan()
-		encodedUserAPIKey = strings.ReplaceAll(scanner.Text(), " ", "")
-		if encodedUserAPIKey == "" {
-			fmt.Println("Invalid input")
-		}
+	encodedUserAPIKey, err := prompt.Line(
+		"\nPlease copy the user API key after authorizing and paste it here",
+		"user API key",
+	)
+	if err != nil {
+		return err
 	}
 
 	// API key

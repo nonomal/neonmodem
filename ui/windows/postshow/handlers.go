@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mrusme/neonmodem/models/post"
+	"github.com/mrusme/neonmodem/models/reply"
 	"github.com/mrusme/neonmodem/ui/cmd"
 	"github.com/mrusme/neonmodem/ui/windows/postcreate"
 	"github.com/pkg/browser"
@@ -139,7 +140,7 @@ func handleOlder(mi interface{}) (bool, []tea.Cmd) {
 
 	m.activePost.CurrentRepliesStartIDX -= 20
 	m.ctx.Loading = true
-	cmds = append(cmds, m.loadPost(m.activePost))
+	cmds = append(cmds, m.loadPost(m.activePost, m.ctx.NextLoadGen()))
 	return true, cmds
 }
 
@@ -184,10 +185,12 @@ func handleWinOpenCmd(mi interface{}, c cmd.Command) (bool, []tea.Cmd) {
 
 	if c.Target == WIN_ID {
 		m.activePost = c.GetArg("post").(*post.Post)
-		m.viewport.SetContent(m.renderViewport(m.activePost))
+		m.viewport.SetContent(renderLoadingPlaceholder(m.ctx, m.activePost))
+		m.replyIDs = []string{m.activePost.ID}
+		m.allReplies = []*reply.Reply{}
 		m.ctx.Logger.Debugf("loading post: %s\n", m.activePost.ID)
 		m.ctx.Loading = true
-		cmds = append(cmds, m.loadPost(m.activePost))
+		cmds = append(cmds, m.loadPost(m.activePost, m.ctx.NextLoadGen()))
 		return true, cmds
 	}
 
@@ -201,10 +204,11 @@ func handleWinRefreshDataCmd(mi interface{}, c cmd.Command) (bool, []tea.Cmd) {
 	if c.Target == WIN_ID ||
 		c.Target == "*" {
 		m.ctx.Loading = true
+		gen := m.ctx.NextLoadGen()
 		if delay := c.GetArg("delay"); delay != nil {
-			cmds = append(cmds, m.loadPost(m.activePost, delay.(time.Duration)))
+			cmds = append(cmds, m.loadPost(m.activePost, gen, delay.(time.Duration)))
 		} else {
-			cmds = append(cmds, m.loadPost(m.activePost))
+			cmds = append(cmds, m.loadPost(m.activePost, gen))
 		}
 		return true, cmds
 	}
@@ -217,8 +221,16 @@ func handleWinFreshDataCmd(mi interface{}, c cmd.Command) (bool, []tea.Cmd) {
 
 	if c.Target == WIN_ID ||
 		c.Target == "*" {
+		if gen, ok := c.GetArg("gen").(int64); ok && !m.ctx.IsCurrentLoadGen(gen) {
+			return true, cmds
+		}
+
 		m.activePost = c.GetArg("post").(*post.Post)
-		m.viewport.SetContent(m.renderViewport(m.activePost))
+		if rendered, ok := c.GetArg("rendered").(renderedPost); ok {
+			m.viewport.SetContent(rendered.content)
+			m.replyIDs = rendered.replyIDs
+			m.allReplies = rendered.allReplies
+		}
 		m.ctx.Loading = false
 		return true, cmds
 	}

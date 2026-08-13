@@ -16,12 +16,42 @@ func init() {
 	rootCmd.AddCommand(cmd)
 }
 
+func validateSysURL(sysURL string) error {
+	if sysURL == "" {
+		return nil
+	}
+
+	parsed, err := url.Parse(sysURL)
+	if err != nil {
+		return fmt.Errorf("%s doesn't look like a valid URL: %w", sysURL, err)
+	}
+
+	if parsed.Host == "" ||
+		(parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return fmt.Errorf(
+			"%s doesn't look like a valid URL, please provide a full address "+
+				"including the scheme, e.g. https://example.com",
+			sysURL,
+		)
+	}
+
+	return nil
+}
+
+func fail(err error) {
+	if LOG != nil {
+		LOG.Error(err)
+	}
+	fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+	os.Exit(1)
+}
+
 func connectBase() *cobra.Command {
 	var sysType string = ""
 	var sysURL string = ""
 	var sysConfig map[string]interface{}
 
-	var cmd = &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "connect",
 		Short: "Connect to BBS",
 		Long:  "Add a new connection to a BBS.",
@@ -37,15 +67,14 @@ func connectBase() *cobra.Command {
 			sysConfig["proxy"] = ""
 			sys, err := system.New(sysType, &sysConfig, LOG)
 			if err != nil {
-				LOG.Panicln(err)
+				fail(err)
 			}
 
 			sysURL := strings.TrimRight(sysURL, "/")
-			sysURLparsed, err := url.Parse(sysURL)
-			if err != nil {
-				fmt.Print(err)
-				os.Exit(1)
+			if err := validateSysURL(sysURL); err != nil {
+				fail(err)
 			}
+			sysURLparsed, _ := url.Parse(sysURL)
 
 			if caps := sys.GetCapabilities(); !caps.IsCapableOf("connect:multiple") {
 				for _, existingSys := range CFG.Systems {
@@ -72,7 +101,7 @@ func connectBase() *cobra.Command {
 			}
 
 			if err := sys.Connect(sysURL); err != nil {
-				LOG.Panicln(err)
+				fail(err)
 			}
 
 			CFG.Systems = append(CFG.Systems, config.SystemConfig{
@@ -80,7 +109,7 @@ func connectBase() *cobra.Command {
 				Config: sys.GetConfig(),
 			})
 			if err := CFG.Save(); err != nil {
-				LOG.Panicln(err)
+				fail(err)
 			}
 
 			fmt.Println("Successfully added new connection!")
@@ -94,7 +123,7 @@ func connectBase() *cobra.Command {
 			&sysType,
 			"type",
 			"",
-			"Type of system to connect to (discourse, lemmy, lobsters, hackernews)",
+			"Type of system to connect to (discourse, lemmy, lobsters, hackernews, hyperuplink)",
 		)
 	cmd.MarkFlagRequired("type")
 
